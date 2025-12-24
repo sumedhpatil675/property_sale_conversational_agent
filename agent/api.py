@@ -8,6 +8,9 @@ from langchain_core.messages import HumanMessage, AIMessage
 import uuid
 from ninja.security import HttpBearer
 from datetime import datetime
+import logging
+
+logger = logging.getLogger(__name__)
 
 class AuthBearer(HttpBearer):
     def authenticate(self, request, token):
@@ -42,45 +45,54 @@ class AgentController(ControllerBase):
         """
         Main chat endpoint.
         """
-        cid = payload.conversation_id
-        
-        # Store user message
-        Message.objects.create(
-            conversation_id=cid,
-            role='user',
-            content=payload.message
-        )
-        
-        # Retrieve history from DB
-        db_messages = Message.objects.filter(conversation_id=cid).order_by('created_at')
-        
-        # Convert to LangChain format
-        messages = []
-        for msg in db_messages:
-            if msg.role == 'user':
-                messages.append(HumanMessage(content=msg.content))
-            else:
-                messages.append(AIMessage(content=msg.content))
-                
-        initial_state = {
-            "messages": messages,
-            "conversation_id": cid
-        }
-        
-        result = agent_app.invoke(initial_state)
-        final_response = result.get("final_response", "I'm not sure how to respond to that.")
-        
-        # Store AI response
-        Message.objects.create(
-            conversation_id=cid,
-            role='assistant',
-            content=final_response
-        )
-        
-        return {
-            "response": final_response,
-            "shortlisted_projects": [] # To be filled if available
-        }
+        try:
+            cid = payload.conversation_id
+            logger.info(f"Received chat request for conversation {cid}: {payload.message}")
+            
+            # Store user message
+            Message.objects.create(
+                conversation_id=cid,
+                role='user',
+                content=payload.message
+            )
+            
+            # Retrieve history from DB
+            db_messages = Message.objects.filter(conversation_id=cid).order_by('created_at')
+            
+            # Convert to LangChain format
+            messages = []
+            for msg in db_messages:
+                if msg.role == 'user':
+                    messages.append(HumanMessage(content=msg.content))
+                else:
+                    messages.append(AIMessage(content=msg.content))
+                    
+            initial_state = {
+                "messages": messages,
+                "conversation_id": cid
+            }
+            
+            result = agent_app.invoke(initial_state)
+            final_response = result.get("final_response", "I'm not sure how to respond to that.")
+            
+            # Store AI response
+            Message.objects.create(
+                conversation_id=cid,
+                role='assistant',
+                content=final_response
+            )
+            
+            logger.info(f"Response generated for conversation {cid}")
+            return {
+                "response": final_response,
+                "shortlisted_projects": [] # To be filled if available
+            }
+        except Exception as e:
+            logger.error(f"Error in chat_agent: {str(e)}", exc_info=True)
+            return {
+                "response": "An error occurred while processing your request.",
+                "shortlisted_projects": []
+            }
 
 @api_controller("", tags=["General"])
 class GeneralController(ControllerBase):

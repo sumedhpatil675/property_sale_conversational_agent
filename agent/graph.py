@@ -1,5 +1,6 @@
 import json
 import os
+import logging
 from typing import TypedDict, Annotated, List, Union, Optional
 from langgraph.graph import StateGraph, END
 from langchain_core.messages import HumanMessage, AIMessage, BaseMessage
@@ -11,6 +12,8 @@ from agent.models import VisitBooking, Lead
 # from langchain_community.tools import DuckDuckGoSearchRun
 from django.core.exceptions import ObjectDoesNotExist
 import re
+
+logger = logging.getLogger(__name__)
 
 # Import prompts
 from agent.prompts.router import ROUTER_PROMPT
@@ -65,10 +68,10 @@ def rewrite_query(query: str, messages: List[BaseMessage]) -> str:
     try:
         response = llm.invoke(prompt)
         rewritten = response.content.strip()
-        print(f"Rewrote query: '{query}' -> '{rewritten}'")
+        logger.info(f"Rewrote query: '{query}' -> '{rewritten}'")
         return rewritten
     except Exception as e:
-        print(f"Error rewriting query: {e}")
+        logger.error(f"Error rewriting query: {e}")
         return query
 
 def router_node(state: AgentState):
@@ -85,6 +88,8 @@ def router_node(state: AgentState):
     chain = ROUTER_PROMPT | llm
     response = chain.invoke({"query": last_message, "context": context})
     intent = response.content.strip().lower()
+    
+    logger.info(f"ROUTER: Detected intent '{intent}' for query: '{last_message}'")
     
     valid_intents = ["recommend", "details", "book", "chat", "search"]
     if intent not in valid_intents:
@@ -109,7 +114,9 @@ def recommend_node(state: AgentState):
         # We append a hint to ensure columns are selected
         enhanced_query = f"{rewritten_query}. Include name, city, price, bedrooms in the result."
         
+        logger.info(f"RECOMMEND: Generating SQL for query: '{enhanced_query}'")
         sql = vn.generate_sql(enhanced_query)
+        logger.info(f"RECOMMEND: Generated SQL: {sql}")
         
         if "agent_property" not in sql:
              pass
@@ -117,8 +124,10 @@ def recommend_node(state: AgentState):
         df = vn.run_sql(sql)
         
         if df is not None and not df.empty:
+            logger.info(f"RECOMMEND: Found {len(df)} properties")
             result_str = df.to_markdown(index=False)
         else:
+            logger.info("RECOMMEND: No properties found in DB")
             result_str = "No properties found matching criteria."
             
         return {"sql_query": sql, "sql_result": result_str}
@@ -151,6 +160,8 @@ def search_node(state: AgentState):
     
     # Contextualize query
     rewritten_query = rewrite_query(query, messages)
+    
+    logger.info(f"SEARCH: Performing Tavily search for: '{rewritten_query}'")
     
     try:
         # Tavily search
@@ -220,7 +231,7 @@ def book_node(state: AgentState):
             booking_status = "missing_info"
             
     except Exception as e:
-        print(f"Error in book_node: {e}")
+        logger.error(f"Error in book_node: {e}", exc_info=True)
         booking_status = "error"
         
     return {"booking_status": booking_status}
