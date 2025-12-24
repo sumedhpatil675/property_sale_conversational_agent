@@ -125,6 +125,10 @@ def recommend_node(state: AgentState):
         
         if df is not None and not df.empty:
             logger.info(f"RECOMMEND: Found {len(df)} properties")
+            # Limit results to avoid context overflow
+            if len(df) > 10:
+                logger.info(f"RECOMMEND: Truncating results from {len(df)} to 10")
+                df = df.head(10)
             result_str = df.to_markdown(index=False)
         else:
             logger.info("RECOMMEND: No properties found in DB")

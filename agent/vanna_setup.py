@@ -73,10 +73,13 @@ def setup_vanna_training():
     vn.train(documentation="If searching for a specific area/community (e.g., Dubai Marina, Palm Jumeirah) and 'city' is generic (e.g., Dubai), SEARCH in 'name' AND 'description' columns using LIKE operator.")
     vn.train(documentation="For amenities (pool, gym, etc.), search in 'features' AND 'facilities' columns.")
     vn.train(documentation="If payment plan is requested, search for keywords in 'description' column since there is no payment_plan column.")
+    vn.train(documentation="If searching for properties designed by a specific brand, designer or developer (e.g., Elie Saab, Fendi, Cavalli, MDC Investments), SEARCH in 'developer_name', 'name' AND 'description' columns using LIKE operator.")
     vn.train(documentation="'Silver Land Properties' is the name of the real estate agency. Do NOT filter by developer_name = 'Silver Land Properties' unless explicitly requested as a developer. Generally ignore 'Silver Land Properties' in the query.")
     
     # Correct SQL Examples
     vn.train(question="Find 2 bedroom apartments in Dubai", sql="SELECT * FROM agent_property WHERE city = 'Dubai' AND bedrooms = 2 AND property_type = 'apartment'")
+    vn.train(question="Show me properties designed by MDC Investments LLC", sql="SELECT * FROM agent_property WHERE developer_name LIKE '%MDC Investments%' OR description LIKE '%MDC Investments%'")
+    vn.train(question="Show me villas designed by Elie Saab", sql="SELECT * FROM agent_property WHERE (name LIKE '%Elie Saab%' OR description LIKE '%Elie Saab%') AND property_type = 'villa'")
     vn.train(question="I want a villa in Arabian Ranches", sql="SELECT * FROM agent_property WHERE (city = 'Arabian Ranches' OR name LIKE '%Arabian Ranches%' OR description LIKE '%Arabian Ranches%') AND property_type = 'villa'")
     vn.train(question="Show me penthouses in Downtown", sql="SELECT * FROM agent_property WHERE (city = 'Downtown' OR name LIKE '%Downtown%' OR description LIKE '%Downtown%') AND property_type = 'penthouse'")
     vn.train(question="Do you have studios for rent?", sql="SELECT * FROM agent_property WHERE property_type = 'studio' AND completion_status = 'rent'")
