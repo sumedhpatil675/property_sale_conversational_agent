@@ -6,7 +6,7 @@ from langchain_core.messages import HumanMessage, AIMessage, BaseMessage
 from langchain_openai import ChatOpenAI
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_community.tools.tavily_search import TavilySearchResults
-from agent.vanna_setup import setup_vanna_training
+from agent.vanna_setup import get_vanna_instance
 from agent.models import VisitBooking, Lead
 # from langchain_community.tools import DuckDuckGoSearchRun
 from django.core.exceptions import ObjectDoesNotExist
@@ -20,7 +20,7 @@ from agent.prompts.recommend import RECOMMEND_SYSTEM_PROMPT
 # details and search prompts are available but logic is simple enough here for now
 
 # Initialize Vanna
-vn = setup_vanna_training()
+vn = get_vanna_instance()
 
 class AgentState(TypedDict):
     messages: List[BaseMessage]
