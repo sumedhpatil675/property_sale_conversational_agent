@@ -23,8 +23,23 @@ def get_vanna_instance():
     
     vn = MyVanna(config=config)
     
-    db_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "db.sqlite3")
-    vn.connect_to_sqlite(db_path)
+    # Vanna's legacy adapter seems to insist on a URL format for sqlite or fails with requests.
+    # However, if we look at the source or docs, simple file paths might not be supported in this version's 'connect_to_sqlite'.
+    # But usually it calls sqlite3.connect internally if it's not a URL.
+    # The traceback shows it goes straight to requests.get(url), which means it thinks it is a URL or treats everything as one.
+    
+    # WORKAROUND: Subclass/Override or try a different approach.
+    # But wait, looking at the traceback: `vanna/legacy/base/base.py", line 880, in connect_to_sqlite: response = requests.get(url)`
+    # It assumes the argument is a URL to download the DB?
+    # If the file exists locally, we should probably use run_sql directly or a different method?
+    # No, we need to set the connection.
+    
+    # Let's try explicitly setting the connection on the instance if possible, 
+    # OR bypass the method that insists on downloading.
+    
+    import sqlite3
+    vn.run_sql = lambda sql: pd.read_sql(sql, sqlite3.connect(db_path))
+    vn.run_sql_is_set = True
     
     return vn
 
