@@ -27,14 +27,21 @@ def run():
     # Assuming script is run from project root: python scripts/import_properties.py
     base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     
-    # Priority 1: Check root directory (for deployment if file moved there)
-    csv_path = os.path.join(base_dir, "Property sales agent - Challenge.csv")
+    # Priority 1: Check root directory for simple name
+    csv_path = os.path.join(base_dir, "properties.csv")
     
     if not os.path.exists(csv_path):
-        # Priority 2: Check original updated_assignment_instructions folder
+        # Priority 2: Check root for original name
+        csv_path = os.path.join(base_dir, "Property sales agent - Challenge.csv")
+
+    if not os.path.exists(csv_path):
+        # Priority 3: Check updated_assignment_instructions folder
         csv_path = os.path.join(base_dir, "updated_assignment_instructions", "Property sales agent - Challenge.csv")
     
-    # If not found, try looking in /app (Docker)
+    # Docker Fallbacks
+    if not os.path.exists(csv_path):
+        csv_path = "/app/properties.csv"
+
     if not os.path.exists(csv_path):
         csv_path = "/app/Property sales agent - Challenge.csv"
         
