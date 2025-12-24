@@ -17,5 +17,5 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY . .
 
 # Run migrations and start server
-CMD ["sh", "-c", "python manage.py migrate && python scripts/import_leads.py && gunicorn core.wsgi:application --bind 0.0.0.0:10000"]
+CMD ["sh", "-c", "python manage.py migrate && python scripts/import_properties.py && gunicorn core.wsgi:application --bind 0.0.0.0:10000"]
 
