@@ -16,6 +16,9 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy project code
 COPY . .
 
+# Download embedding model during build to prevent timeouts at runtime
+RUN python scripts/download_model.py && rm -rf tmp_chroma_db_dl
+
 # Run migrations and start server
 CMD ["sh", "-c", "python manage.py migrate && python scripts/import_properties.py && gunicorn core.wsgi:application --bind 0.0.0.0:10000"]
 

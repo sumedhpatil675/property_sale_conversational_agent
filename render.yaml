@@ -2,7 +2,7 @@ services:
   - type: web
     name: proplens-agent
     env: python
-    buildCommand: pip install -r requirements.txt
+    buildCommand: pip install -r requirements.txt && python scripts/download_model.py && rm -rf tmp_chroma_db_dl
     startCommand: gunicorn core.wsgi:application
     envVars:
       - key: PYTHON_VERSION
