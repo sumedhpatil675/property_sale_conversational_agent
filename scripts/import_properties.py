@@ -26,15 +26,23 @@ def run():
     # Use a relative path that works both locally and in Docker/Render
     # Assuming script is run from project root: python scripts/import_properties.py
     base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    csv_path = os.path.join(base_dir, "updated_assignment_instructions", "Property sales agent - Challenge.csv")
     
-    # If not found, try looking in /app/updated_assignment_instructions (Docker)
+    # Priority 1: Check root directory (for deployment if file moved there)
+    csv_path = os.path.join(base_dir, "Property sales agent - Challenge.csv")
+    
+    if not os.path.exists(csv_path):
+        # Priority 2: Check original updated_assignment_instructions folder
+        csv_path = os.path.join(base_dir, "updated_assignment_instructions", "Property sales agent - Challenge.csv")
+    
+    # If not found, try looking in /app (Docker)
+    if not os.path.exists(csv_path):
+        csv_path = "/app/Property sales agent - Challenge.csv"
+        
     if not os.path.exists(csv_path):
         csv_path = "/app/updated_assignment_instructions/Property sales agent - Challenge.csv"
         
     if not os.path.exists(csv_path):
-        print(f"CSV not found at {csv_path}. Current working dir: {os.getcwd()}")
-        # List dirs to help debug
+        print(f"CSV not found. Checked paths relative to {base_dir} and /app.")
         print("Directory listing of .:")
         for root, dirs, files in os.walk("."):
              for name in files:
