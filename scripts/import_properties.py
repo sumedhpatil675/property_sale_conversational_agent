@@ -23,11 +23,23 @@ def clean_price(value):
         return None
 
 def run():
-    # Hardcoded absolute path for safety in this environment
-    csv_path = "/Users/roundcircle/assignment/updated_assignment_instructions/Property sales agent - Challenge.csv"
+    # Use a relative path that works both locally and in Docker/Render
+    # Assuming script is run from project root: python scripts/import_properties.py
+    base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    csv_path = os.path.join(base_dir, "updated_assignment_instructions", "Property sales agent - Challenge.csv")
     
+    # If not found, try looking in /app/updated_assignment_instructions (Docker)
     if not os.path.exists(csv_path):
-        print(f"CSV not found at {csv_path}")
+        csv_path = "/app/updated_assignment_instructions/Property sales agent - Challenge.csv"
+        
+    if not os.path.exists(csv_path):
+        print(f"CSV not found at {csv_path}. Current working dir: {os.getcwd()}")
+        # List dirs to help debug
+        print("Directory listing of .:")
+        for root, dirs, files in os.walk("."):
+             for name in files:
+                 print(os.path.join(root, name))
+             break
         return
 
     print(f"Reading properties from: {csv_path}")
