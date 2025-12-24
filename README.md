@@ -1,95 +1,63 @@
-# Proplens AI Sales Agent (v2)
+# PropLens Agent
 
-This repository contains the solution for the **AI Engineer Challenge v2**. It implements an intelligent Property Sales Agent orchestrated by **LangGraph**, served via a **Django Ninja** API.
+A conversational AI agent for Real Estate, built with Django Ninja, LangGraph, and Vanna.
 
-## 🏗 Architecture
+## Features
 
-- **Framework**: Django Ninja (Python)
-- **Agent Orchestration**: LangGraph (Router -> Recommender/Detailer/Searcher/Booker)
-- **Text-to-SQL**: Vanna AI (trained on SQLite Property schema)
-- **Database**: SQLite
-  - `agent_property`: Real estate projects/units (imported from CSV).
-  - `agent_booking`: Visit bookings.
-  - `agent_lead`: Lead information captured during conversation.
-- **Tools**:
-  - **SQL Tool**: Queries database for recommendations and details.
-  - **Web Search**: Fallback for external information (Simulated/Mock in restricted environments, adaptable to DuckDuckGo/Google).
-- **LLM**: OpenAI (GPT-3.5-turbo)
+- **Natural Language Property Search**: Search for properties using natural language queries (Text-to-SQL).
+- **Project Details**: Get specific details about projects from the database.
+- **Web Search**: Fallback to web search for general questions or external info (schools, etc.).
+- **Booking Flow**: intelligently detects interest and collects lead details for booking.
+- **REST API**: Exposes endpoints for chat and conversation management.
 
-## 🚀 Setup & Installation
+## Tech Stack
 
-### Prerequisites
-- Python 3.9+
-- OpenAI API Key
+- **Backend**: Python, Django, Django Ninja Extra (Controller-based).
+- **Agent**: LangGraph (State management, routing).
+- **Text-to-SQL**: Vanna AI + ChromaDB.
+- **Database**: SQLite (Development).
 
-### 1. Clone & Install Dependencies
+## Setup
+
+1.  **Install Dependencies**:
+    ```bash
+    pip install -r requirements.txt
+    ```
+
+2.  **Environment Variables**:
+    Create a `.env` file (or set env vars) with:
+    ```
+    OPENAI_API_KEY=sk-...
+    TAVILY_API_KEY=tvly-...
+    SECRET_KEY=...
+    DEBUG=True
+    ```
+
+3.  **Migrations**:
+    ```bash
+    python manage.py migrate
+    ```
+
+4.  **Run Server**:
+    ```bash
+    python manage.py runserver
+    ```
+
+## API Documentation
+
+Access the interactive API docs at: `http://localhost:8000/api/docs`
+
+### Endpoints
+
+-   `POST /api/conversations`: Start a new session.
+-   `POST /api/agents/chat`: Send a message.
+    -   Header: `Authorization: Bearer supersecret`
+    -   Body: `{"conversation_id": "...", "message": "..."}`
+-   `GET /api/bookings`: List confirmed bookings.
+
+## Testing
+
+Run the test suite:
 ```bash
-git clone <repo-url>
-cd proplens_assignment
-pip install -r requirements.txt
+python manage.py test agent
 ```
-
-### 2. Configure Environment
-Create a `.env` file in the `proplens_assignment` directory (if not present):
-```bash
-OPENAI_API_KEY=your_openai_api_key_here
-SECRET_KEY=your_django_secret_key
-DEBUG=True
-```
-
-### 3. Initialize Database
-Run migrations and import the property data:
-```bash
-python manage.py migrate
-python scripts/import_properties.py
-```
-
-## 🏃‍♂️ Running the Application
-
-Start the development server:
-```bash
-python manage.py runserver
-```
-The API will be available at: **http://127.0.0.1:8000/api**
-
-### Interactive Documentation (Swagger UI)
-Visit **http://127.0.0.1:8000/api/docs**
-
-## 🧪 Testing
-
-Run the automated flow simulation:
-```bash
-python test_agent_flow.py
-```
-
-## 🧪 Capabilities & Test Cases
-
-### 1. Greeting & Probing
-**Input**: "Hi, I'm looking for a property"
-**Response**: Asks for City, Budget, Bedrooms.
-
-### 2. Recommendation (Text-to-SQL)
-**Input**: "I want a 2 bedroom apartment in Dubai under 2M"
-**Response**: Recommends properties matching criteria from the database.
-
-### 3. Project Details (Q&A)
-**Input**: "Tell me more about Sobha Crest"
-**Response**: Provides description and amenities from the database.
-
-### 4. External Information (Web Search)
-**Input**: "What are the schools near Downtown Dubai?"
-**Response**: Uses search tool to find external information not in the DB.
-
-### 5. Booking & Lead Capture
-**Input**: "I want to book a visit for Sobha Crest. My name is John, email is john@example.com."
-**Response**: Captures lead info into `agent_lead`, creates `agent_booking`, and confirms.
-
-## 📡 API Endpoints
-
-| Method | Endpoint | Description |
-| :--- | :--- | :--- |
-| **POST** | `/api/conversations` | Create a new session ID. |
-| **POST** | `/api/agents/chat` | Main chat interface. Payload: `{ "message": "...", "conversation_id": "..." }` |
-
-## ☁️ Deployment
-Ready for deployment on Render/Vercel. Ensure `OPENAI_API_KEY` environment variable is set.

@@ -1,5 +1,6 @@
 django>=4.2
 django-ninja>=1.0
+django-ninja-extra>=0.20.0
 langgraph
 vanna[openai,chromadb]
 chromadb
@@ -17,3 +18,4 @@ langchain-openai
 langchain-chroma
 psycopg2-binary
 gunicorn
+tavily-python

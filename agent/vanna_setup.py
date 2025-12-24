@@ -1,4 +1,7 @@
 import os
+import pandas as pd
+import sqlite3
+
 try:
     from vanna.openai import OpenAI_Chat
     from vanna.chromadb import ChromaDB_VectorStore
@@ -13,7 +16,9 @@ class MyVanna(ChromaDB_VectorStore, OpenAI_Chat):
 
 def get_vanna_instance():
     api_key = os.getenv("OPENAI_API_KEY")
-    chroma_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "vanna_chroma_db")
+    base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    chroma_path = os.path.join(base_dir, "vanna_chroma_db")
+    db_path = os.path.join(base_dir, "db.sqlite3")
     
     config = {
         "api_key": api_key,
@@ -23,21 +28,7 @@ def get_vanna_instance():
     
     vn = MyVanna(config=config)
     
-    # Vanna's legacy adapter seems to insist on a URL format for sqlite or fails with requests.
-    # However, if we look at the source or docs, simple file paths might not be supported in this version's 'connect_to_sqlite'.
-    # But usually it calls sqlite3.connect internally if it's not a URL.
-    # The traceback shows it goes straight to requests.get(url), which means it thinks it is a URL or treats everything as one.
-    
-    # WORKAROUND: Subclass/Override or try a different approach.
-    # But wait, looking at the traceback: `vanna/legacy/base/base.py", line 880, in connect_to_sqlite: response = requests.get(url)`
-    # It assumes the argument is a URL to download the DB?
-    # If the file exists locally, we should probably use run_sql directly or a different method?
-    # No, we need to set the connection.
-    
-    # Let's try explicitly setting the connection on the instance if possible, 
-    # OR bypass the method that insists on downloading.
-    
-    import sqlite3
+    # Override run_sql to use local sqlite connection directly
     vn.run_sql = lambda sql: pd.read_sql(sql, sqlite3.connect(db_path))
     vn.run_sql_is_set = True
     
@@ -68,25 +59,36 @@ def setup_vanna_training():
     );
     """
     
-    training_data = vn.get_training_data()
-    # If empty or we want to force retrain (for now assume check is enough)
-    if training_data is None or len(training_data) < 5:
-        print("Training Vanna with Property DDL...")
-        vn.train(ddl=ddl)
-        vn.train(documentation="The 'agent_property' table contains real estate projects and units for sale.")
-        vn.train(documentation="The column 'property_type' indicates if it is an apartment, villa, or townhouse. Use this for filtering type.")
-        vn.train(documentation="The column 'unit_type' often contains specific model names or bedroom counts (e.g. '2 BR') and is less reliable for filtering than 'property_type' or 'bedrooms'.")
-        
-        vn.train(sql="SELECT * FROM agent_property WHERE city = 'Chicago' AND price < 1000000")
-        vn.train(question="Find 2 bedroom apartments in Chicago", sql="SELECT * FROM agent_property WHERE city = 'Chicago' AND bedrooms = 2 AND property_type = 'apartment'")
-        vn.train(question="Show me villas in Dubai", sql="SELECT * FROM agent_property WHERE city = 'Dubai' AND property_type = 'villa'")
-        
-        # New training for details
-        vn.train(question="Tell me about Sobha Crest", sql="SELECT * FROM agent_property WHERE name LIKE '%Sobha Crest%'")
-        vn.train(question="What are the amenities at Beachgate?", sql="SELECT features, facilities, description FROM agent_property WHERE name LIKE '%Beachgate%'")
-        vn.train(question="Give me details of Project X", sql="SELECT * FROM agent_property WHERE name LIKE '%Project X%'")
-        
-        # Explicit training to avoid unit_type filtering
-        vn.train(question="Find 2 bedroom apartments in Dubai", sql="SELECT * FROM agent_property WHERE city = 'Dubai' AND bedrooms = 2 AND property_type = 'apartment'")
+    # Check if we need to retrain or add more examples
+    # Since we are enhancing, let's just add them. Vanna handles duplicates usually or we just add.
     
+    print("Enhancing Vanna Training...")
+    vn.train(ddl=ddl)
+    
+    # Documentation to clarify columns
+    vn.train(documentation="ALWAYS use 'property_type' column for filtering by type (apartment, villa, townhouse, penthouse, studio).")
+    vn.train(documentation="NEVER use 'unit_type' for filtering property types like apartment or villa. It is unreliable.")
+    vn.train(documentation="For 'studio', use property_type = 'Apartment' AND bedrooms = 0 OR property_type = 'Studio'.")
+    vn.train(documentation="For 'off-plan', check completion_status = 'off-plan'.")
+    vn.train(documentation="If searching for a specific area/community (e.g., Dubai Marina, Palm Jumeirah) and 'city' is generic (e.g., Dubai), SEARCH in 'name' AND 'description' columns using LIKE operator.")
+    vn.train(documentation="For amenities (pool, gym, etc.), search in 'features' AND 'facilities' columns.")
+    vn.train(documentation="If payment plan is requested, search for keywords in 'description' column since there is no payment_plan column.")
+    vn.train(documentation="'Silver Land Properties' is the name of the real estate agency. Do NOT filter by developer_name = 'Silver Land Properties' unless explicitly requested as a developer. Generally ignore 'Silver Land Properties' in the query.")
+    
+    # Correct SQL Examples
+    vn.train(question="Find 2 bedroom apartments in Dubai", sql="SELECT * FROM agent_property WHERE city = 'Dubai' AND bedrooms = 2 AND property_type = 'apartment'")
+    vn.train(question="I want a villa in Arabian Ranches", sql="SELECT * FROM agent_property WHERE (city = 'Arabian Ranches' OR name LIKE '%Arabian Ranches%' OR description LIKE '%Arabian Ranches%') AND property_type = 'villa'")
+    vn.train(question="Show me penthouses in Downtown", sql="SELECT * FROM agent_property WHERE (city = 'Downtown' OR name LIKE '%Downtown%' OR description LIKE '%Downtown%') AND property_type = 'penthouse'")
+    vn.train(question="Do you have studios for rent?", sql="SELECT * FROM agent_property WHERE property_type = 'studio' AND completion_status = 'rent'")
+    vn.train(question="Looking for a house", sql="SELECT * FROM agent_property WHERE property_type IN ('villa', 'townhouse')")
+    vn.train(question="Show me Emaar off-plan projects", sql="SELECT * FROM agent_property WHERE developer_name LIKE '%Emaar%' AND completion_status = 'off-plan'")
+    vn.train(question="Search for properties under 1 million", sql="SELECT * FROM agent_property WHERE price < 1000000")
+    vn.train(question="I want a 2 bedroom apartment in Dubai under 2 million", sql="SELECT * FROM agent_property WHERE city = 'Dubai' AND bedrooms = 2 AND property_type = 'apartment' AND price < 2000000")
+    vn.train(question="Find a 3 bedroom villa in Dubai for less than 5 million", sql="SELECT * FROM agent_property WHERE city = 'Dubai' AND bedrooms = 3 AND property_type = 'villa' AND price < 5000000")
+    vn.train(question="Show me apartments in Downtown with 1 bedroom under 1.5M", sql="SELECT * FROM agent_property WHERE (city = 'Downtown' OR name LIKE '%Downtown%' OR description LIKE '%Downtown%') AND property_type = 'apartment' AND bedrooms = 1 AND price < 1500000")
+    vn.train(question="Do you have any 4 bedroom villas in Palm Jumeirah over 10 million?", sql="SELECT * FROM agent_property WHERE (city = 'Palm Jumeirah' OR name LIKE '%Palm Jumeirah%' OR description LIKE '%Palm Jumeirah%') AND property_type = 'villa' AND bedrooms = 4 AND price > 10000000")
+    vn.train(question="What is the payment plan?", sql="SELECT description FROM agent_property WHERE description LIKE '%payment plan%' OR description LIKE '%installment%'")
+    vn.train(question="Any properties with a pool?", sql="SELECT * FROM agent_property WHERE features LIKE '%pool%' OR facilities LIKE '%pool%'")
+    vn.train(question="Find properties in Dubai Marina", sql="SELECT * FROM agent_property WHERE city = 'Dubai Marina' OR name LIKE '%Dubai Marina%' OR description LIKE '%Dubai Marina%'")
+
     return vn

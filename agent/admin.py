@@ -1,13 +1,13 @@
 from django.contrib import admin
-from .models import Property, Booking, Lead, Message
+from .models import Property, VisitBooking, Lead, Message
 
 @admin.register(Property)
 class PropertyAdmin(admin.ModelAdmin):
     list_display = ('name', 'city', 'price', 'unit_type', 'completion_status')
     search_fields = ('name', 'city', 'developer_name')
 
-@admin.register(Booking)
-class BookingAdmin(admin.ModelAdmin):
+@admin.register(VisitBooking)
+class VisitBookingAdmin(admin.ModelAdmin):
     list_display = ('lead_name', 'lead_email', 'project_name', 'city', 'booking_date')
 
 @admin.register(Lead)

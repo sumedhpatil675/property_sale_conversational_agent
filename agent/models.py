@@ -21,13 +21,16 @@ class Property(models.Model):
     def __str__(self):
         return f"{self.name} - {self.unit_type} ({self.city})"
 
-class Booking(models.Model):
+class VisitBooking(models.Model):
     lead_name = models.CharField(max_length=255)
     lead_email = models.EmailField()
     project_name = models.CharField(max_length=255)
     city = models.CharField(max_length=100, null=True, blank=True)
     booking_date = models.DateTimeField(auto_now_add=True)
     
+    class Meta:
+        db_table = 'visit_bookings'
+
     def __str__(self):
         return f"Booking: {self.lead_name} for {self.project_name}"
 

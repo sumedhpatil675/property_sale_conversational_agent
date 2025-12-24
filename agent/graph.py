@@ -1,14 +1,23 @@
 import json
+import os
 from typing import TypedDict, Annotated, List, Union, Optional
 from langgraph.graph import StateGraph, END
 from langchain_core.messages import HumanMessage, AIMessage, BaseMessage
 from langchain_openai import ChatOpenAI
 from langchain_core.prompts import ChatPromptTemplate
+from langchain_community.tools.tavily_search import TavilySearchResults
 from agent.vanna_setup import setup_vanna_training
-from agent.models import Booking, Lead
+from agent.models import VisitBooking, Lead
 # from langchain_community.tools import DuckDuckGoSearchRun
 from django.core.exceptions import ObjectDoesNotExist
 import re
+
+# Import prompts
+from agent.prompts.router import ROUTER_PROMPT
+from agent.prompts.generator import GENERATOR_PROMPT_TEMPLATE
+from agent.prompts.book import BOOK_PROMPT
+from agent.prompts.recommend import RECOMMEND_SYSTEM_PROMPT
+# details and search prompts are available but logic is simple enough here for now
 
 # Initialize Vanna
 vn = setup_vanna_training()
@@ -23,16 +32,44 @@ class AgentState(TypedDict):
     final_response: str
     booking_status: Optional[str]
 
-class MockSearchTool:
-    def invoke(self, query):
-        # Simulate a search result for demonstration since internet access/packages are restricted
-        return f"[Mock Search Result] Information found for '{query}': \n" \
-               f"- Nearby Schools: Gems World Academy (2km), North London Collegiate School (3km)\n" \
-               f"- Hospitals: King's College Hospital (5km)\n" \
-               f"- Market Trends: Property prices in this area have risen 5% in the last quarter."
+# Set Tavily API Key
+os.environ["TAVILY_API_KEY"] = "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"
 
 llm = ChatOpenAI(model="gpt-3.5-turbo", temperature=0)
-search_tool = MockSearchTool()
+search_tool = TavilySearchResults(max_results=3)
+
+def rewrite_query(query: str, messages: List[BaseMessage]) -> str:
+    """Rewrites the query to include context from history."""
+    if len(messages) <= 1:
+        return query
+        
+    history = "\n".join([f"{m.type}: {m.content}" for m in messages[-4:-1]])
+    if not history:
+        return query
+        
+    prompt = f"""Based on the conversation history, rewrite the user's latest query to include necessary context (like location, property name, or project) if missing from the query itself.
+    
+    IMPORTANT GUIDELINES:
+    1. Do NOT add the agency name (e.g., "Silver Land Properties") to the query.
+    2. Do NOT add "from <Company Name>" unless the user explicitly mentioned a specific developer (e.g., Emaar, Damac).
+    3. Keep the query focused on property attributes (location, price, type, bedrooms).
+    4. If the query is already complete, return it as is.
+    
+    History:
+    {history}
+    
+    Latest Query: {query}
+    
+    Rewritten Query:"""
+    
+    try:
+        response = llm.invoke(prompt)
+        rewritten = response.content.strip()
+        print(f"Rewrote query: '{query}' -> '{rewritten}'")
+        return rewritten
+    except Exception as e:
+        print(f"Error rewriting query: {e}")
+        return query
 
 def router_node(state: AgentState):
     messages = state['messages']
@@ -44,33 +81,14 @@ def router_node(state: AgentState):
         last_ai_message = messages[-2].content if isinstance(messages[-2], AIMessage) else ""
         context = f"Previous AI Message: {last_ai_message}"
 
-    # Enhanced classification
-    prompt = ChatPromptTemplate.from_template(
-        """
-        You are a Real Estate Agent Router.
-        Classify the user's intent based on the last message and conversation context.
-        
-        Context:
-        {context}
-
-        Options:
-        - "recommend": User is stating preferences (budget, location, bedrooms), asking for suggestions, or saying "yes" to a suggestion offer.
-        - "details": User is asking specific questions about a project (amenities, price, completion) that should be in the database.
-        - "search": User is asking for external information not likely in the DB (schools, nearby hospitals, general market trends).
-        - "book": User wants to schedule a visit, book a viewing, or is providing contact info.
-        - "chat": Greetings, thanks, or general conversation.
-        
-        User Query: {query}
-        
-        Return only the keyword.
-        """
-    )
-    chain = prompt | llm
+    # Use imported ROUTER_PROMPT
+    chain = ROUTER_PROMPT | llm
     response = chain.invoke({"query": last_message, "context": context})
     intent = response.content.strip().lower()
     
     valid_intents = ["recommend", "details", "book", "chat", "search"]
     if intent not in valid_intents:
+        # Default fallback
         intent = "chat"
         
     return {"intent": intent}
@@ -79,8 +97,18 @@ def recommend_node(state: AgentState):
     messages = state['messages']
     query = messages[-1].content
     
+    # Contextualize query
+    rewritten_query = rewrite_query(query, messages)
+    
     try:
-        enhanced_query = f"Find properties: {query}. Return name, city, price, bedrooms."
+        # Vanna works better with clear instructions in the query or simple questions
+        # enhanced_query = f"Find properties: {rewritten_query}. Return name, city, price, bedrooms."
+        # Let's try passing the rewritten query directly, but asking for specific columns via Vanna training or prompt instructions
+        # Vanna's generate_sql takes the question.
+        
+        # We append a hint to ensure columns are selected
+        enhanced_query = f"{rewritten_query}. Include name, city, price, bedrooms in the result."
+        
         sql = vn.generate_sql(enhanced_query)
         
         if "agent_property" not in sql:
@@ -101,8 +129,11 @@ def details_node(state: AgentState):
     messages = state['messages']
     query = messages[-1].content
     
+    # Contextualize query
+    rewritten_query = rewrite_query(query, messages)
+    
     try:
-        sql = vn.generate_sql(query)
+        sql = vn.generate_sql(rewritten_query)
         df = vn.run_sql(sql)
         
         if df is not None and not df.empty:
@@ -117,9 +148,24 @@ def details_node(state: AgentState):
 def search_node(state: AgentState):
     messages = state['messages']
     query = messages[-1].content
+    
+    # Contextualize query
+    rewritten_query = rewrite_query(query, messages)
+    
     try:
-        # DuckDuckGo search
-        result = search_tool.invoke(query)
+        # Tavily search
+        results = search_tool.invoke(rewritten_query)
+        
+        # Format results if they are a list
+        if isinstance(results, list):
+            formatted_results = "\n".join([
+                f"- {r.get('content', '')} (Source: {r.get('url', '')})" 
+                for r in results
+            ])
+            result = formatted_results
+        else:
+            result = str(results)
+            
         return {"search_result": result}
     except Exception as e:
         return {"search_result": f"Search failed: {str(e)}"}
@@ -128,21 +174,12 @@ def book_node(state: AgentState):
     messages = state['messages']
     last_message = messages[-1].content
     
-    prompt = ChatPromptTemplate.from_template("""
-    Extract the following booking details from the text:
-    - Lead Name (name)
-    - Lead Email (email)
-    - Project Name (project)
-    - City (city)
+    # Extract history for context-aware booking
+    history = "\n".join([f"{m.type}: {m.content}" for m in messages[-6:]])
     
-    Text: {text}
-    
-    Return a valid JSON object with keys: name, email, project, city. 
-    Values should be null if not found.
-    """)
-    
-    chain = prompt | llm
-    response = chain.invoke({"text": last_message})
+    # Use imported BOOK_PROMPT
+    chain = BOOK_PROMPT | llm
+    response = chain.invoke({"text": last_message, "history": history})
     
     booking_status = "pending_info"
     
@@ -172,7 +209,7 @@ def book_node(state: AgentState):
 
         if name and email and project:
             # Create Booking
-            Booking.objects.create(
+            VisitBooking.objects.create(
                 lead_name=name,
                 lead_email=email,
                 project_name=project,
@@ -192,71 +229,26 @@ def generator_node(state: AgentState):
     intent = state['intent']
     messages = state['messages']
     last_message = messages[-1].content
-    sql_result = state.get('sql_result')
-    search_result = state.get('search_result')
-    booking_status = state.get('booking_status')
+    sql_result = state.get('sql_result', '')
+    search_result = state.get('search_result', '')
+    booking_status = state.get('booking_status', '')
     
-    if intent == "recommend":
-        prompt = f"""
-        User asked: {last_message}
-        
-        Database Results:
-        {sql_result}
-        
-        Task: Recommend 1-3 suitable projects from the results. 
-        Highlight key features (Price, City, Beds). 
-        Ask if they want to see more details or book a visit.
-        """
-    elif intent == "details":
-        prompt = f"""
-        User asked: {last_message}
-        
-        Database Information:
-        {sql_result}
-        
-        Task: Answer the user's question accurately based on the data.
-        If data is missing, admit it.
-        """
-    elif intent == "search":
-        prompt = f"""
-        User asked: {last_message}
-        
-        Web Search Results:
-        {search_result}
-        
-        Task: Answer the user's question using the web search results.
-        Cite the source if possible.
-        """
-    elif intent == "book":
-        if booking_status == "confirmed":
-            prompt = f"""
-            User said: {last_message}
-            Booking Status: Confirmed.
-            
-            Task: Confirm the booking to the user enthusiastically. Mention we will contact them shortly.
-            """
-        else:
-            prompt = f"""
-            User said: {last_message}
-            Booking Status: Missing Information.
-            
-            Task: Politely ask for the missing information (Name, Email, or Project Name) to complete the booking.
-            """
-    else:
-        # Chat intent: Include history for context-aware response
-        history = "\n".join([f"{m.type}: {m.content}" for m in messages[-4:]]) # Last 4 messages
-        prompt = f"""
-        Conversation History:
-        {history}
-        
-        You are a helpful Real Estate Sales Assistant for 'Silver Land Properties'.
-        Respond to the user's last message naturally based on the history.
-        If they are saying hello, greet them and ask about preferences (City, Budget, Bedrooms).
-        If they are responding to a question, continue the flow naturally.
-        If the conversation history shows you just provided information (like search results) and the user hasn't asked a new question, simply ask if they need help with anything else or if they would like to proceed with a booking.
-        """
-        
-    response = llm.invoke(prompt)
+    # Construct history string
+    history = "\n".join([f"{m.type}: {m.content}" for m in messages[-4:]])
+    
+    # Use imported GENERATOR_PROMPT_TEMPLATE
+    prompt = ChatPromptTemplate.from_template(GENERATOR_PROMPT_TEMPLATE)
+    
+    chain = prompt | llm
+    response = chain.invoke({
+        "intent": intent,
+        "last_message": last_message,
+        "sql_result": sql_result,
+        "search_result": search_result,
+        "booking_status": booking_status,
+        "history": history
+    })
+    
     return {"final_response": response.content}
 
 # Workflow
