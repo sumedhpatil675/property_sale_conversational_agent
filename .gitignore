@@ -1,0 +1,8 @@
+.DS_Store
+.venv/
+__pycache__/
+*.pyc
+db.sqlite3
+.env
+proplens_assignment/.env
+
