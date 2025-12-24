@@ -16,3 +16,4 @@ langchain-community
 langchain-openai
 langchain-chroma
 psycopg2-binary
+gunicorn
