@@ -38,7 +38,7 @@ class AgentState(TypedDict):
 # Set Tavily API Key
 os.environ["TAVILY_API_KEY"] = "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"
 
-llm = ChatOpenAI(model="gpt-3.5-turbo", temperature=0)
+llm = ChatOpenAI(model="gpt-4o", temperature=0)
 search_tool = TavilySearchResults(max_results=3)
 
 def rewrite_query(query: str, messages: List[BaseMessage]) -> str:

@@ -22,7 +22,7 @@ def get_vanna_instance():
     
     config = {
         "api_key": api_key,
-        "model": "gpt-3.5-turbo",
+        "model": "gpt-4o",
         "path": chroma_path
     }
     
