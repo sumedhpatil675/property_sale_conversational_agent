@@ -15,7 +15,7 @@ class AgentFlowTests(TestCase):
             content_type="application/json",
             **self.headers
         )
-        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.status_code, 201)
         conv_id = response.json().get("conversation_id")
         self.assertTrue(conv_id)
 

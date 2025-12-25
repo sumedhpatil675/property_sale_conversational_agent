@@ -38,9 +38,12 @@ class BookingSchema(Schema):
 class ConversationResponse(Schema):
     conversation_id: str
 
+class ErrorResponse(Schema):
+    message: str
+
 @api_controller("/agents", tags=["Agents"])
 class AgentController(ControllerBase):
-    @route.post("/chat", response=ChatResponse)
+    @route.post("/chat", response={200: ChatResponse, 500: ErrorResponse})
     def chat_agent(self, payload: ChatRequest):
         """
         Main chat endpoint.
@@ -83,33 +86,30 @@ class AgentController(ControllerBase):
             )
             
             logger.info(f"Response generated for conversation {cid}")
-            return {
+            return 200, {
                 "response": final_response,
                 "shortlisted_projects": [] # To be filled if available
             }
         except Exception as e:
             logger.error(f"Error in chat_agent: {str(e)}", exc_info=True)
-            return {
-                "response": "An error occurred while processing your request.",
-                "shortlisted_projects": []
-            }
+            return 500, {"message": "An error occurred while processing your request."}
 
 @api_controller("", tags=["General"])
 class GeneralController(ControllerBase):
-    @route.post("/conversations", response=ConversationResponse)
+    @route.post("/conversations", response={201: ConversationResponse})
     def create_conversation(self):
         """
         Creates a new conversation session.
         """
         cid = str(uuid.uuid4())
-        return {"conversation_id": cid}
+        return 201, {"conversation_id": cid}
 
-    @route.get("/bookings", response=List[BookingSchema])
+    @route.get("/bookings", response={200: List[BookingSchema]})
     def list_bookings(self):
         """
         List all confirmed bookings.
         """
         bookings = VisitBooking.objects.all()
-        return bookings
+        return 200, bookings
 
 api.register_controllers(AgentController, GeneralController)
