@@ -35,8 +35,6 @@ class AgentState(TypedDict):
     final_response: str
     booking_status: Optional[str]
 
-# Set Tavily API Key
-os.environ["TAVILY_API_KEY"] = "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"
 
 llm = ChatOpenAI(model="gpt-4o", temperature=0)
 search_tool = TavilySearchResults(max_results=3)
